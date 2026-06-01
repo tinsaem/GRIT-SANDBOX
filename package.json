@@ -1,0 +1,22 @@
+{
+  "name": "grit-sandbox",
+  "version": "17.0.0",
+  "description": "GRIT Sandbox v17 – Gamified Reputation Individualized Talent",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "concurrently -n SERVER,CLIENT -c cyan,magenta \"node --watch index.js\" \"npm run dev --prefix client\"",
+    "dev:server": "node --watch index.js",
+    "dev:client": "npm run dev --prefix client",
+    "build": "npm run build --prefix client"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
