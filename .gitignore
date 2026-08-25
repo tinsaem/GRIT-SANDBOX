@@ -1,0 +1,32 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vite
+
+# Environment variables — never commit secrets
+*.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+server/.env
+
+# Keycloak migration output — contains temporary passwords
+keycloak-temp-passwords-*.json
+server/keycloak-temp-passwords-*.json

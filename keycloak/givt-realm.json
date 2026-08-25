@@ -1,0 +1,118 @@
+{
+  "realm": "givt",
+  "displayName": "GIVT Platform",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "verifyEmail": false,
+  "editUsernameAllowed": false,
+  "rememberMe": true,
+  "_comment_tokens": "Access tokens are short-lived; the frontend silently refreshes. SSO session idle 30 min, max 10 h.",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "_comment_bruteforce": "Keycloak gives you lockout for free \u2014 GIVT's hand-rolled auth had none.",
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "passwordPolicy": "length(8) and notUsername(undefined) and passwordHistory(3)",
+  "_comment_roles": "These mirror GIVT's Role enum exactly. Peer is absent by design \u2014 it is a Student capability held in the app database, not an identity role.",
+  "roles": {
+    "realm": [
+      {
+        "name": "Student",
+        "description": "Learner: closes skill gaps, gets verified, peer-reviews others"
+      },
+      {
+        "name": "Professor",
+        "description": "Academic staff: verifies skills, authors syllabi"
+      },
+      {
+        "name": "Advisor",
+        "description": "Career advisor: guidance and reviews"
+      },
+      {
+        "name": "Employer",
+        "description": "Industry: verifies skills, posts job descriptions"
+      },
+      {
+        "name": "Admin",
+        "description": "Platform administrator"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "givt-frontend",
+      "name": "GIVT React SPA",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "_comment": "Public client + PKCE. No secret, because a browser cannot keep one.",
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      },
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3000"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience-for-givt-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "_comment": "Without this the token's aud is 'account' and the API rejects it.",
+          "config": {
+            "included.client.audience": "givt-api",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "realm-roles-in-token",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "givt-api",
+      "name": "GIVT Express API",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "_comment": "bearerOnly: validates tokens, never issues them. serviceAccounts enabled so the user-migration script can call the Admin REST API.",
+      "secret": "CHANGE_ME_IN_PRODUCTION_api_client_secret"
+    }
+  ],
+  "_comment_users": "One bootstrap admin so you can log in immediately. Delete after migrating real users.",
+  "users": []
+}

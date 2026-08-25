@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────────────
+
+/// Peer is deliberately NOT a role. A peer is a Student with the
+/// peerVerifierEnabled capability — see User.peerVerifierEnabled.
+enum Role {
+  Student
+  Professor
+  Advisor
+  Employer
+  Admin
+}
+
+enum SyllabusStatus {
+  pending
+  supervised
+  completed
+}
+
+// ── Models ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                       String    @id @default(uuid())
+  email                    String?   @unique
+  googleId                 String?   @unique @map("google_id")
+  passwordHash             String?   @map("password_hash")
+  name                     String
+  role                     Role
+  hederaAddress            String?   @map("hedera_address")
+  profileText              String?   @map("profile_text")
+  emailVerified            Boolean   @default(false) @map("email_verified")
+  isActive                 Boolean   @default(true) @map("is_active")
+  /// Peer-review privilege. Only meaningful for Students: when true the
+  /// student may verify OTHER students' skills (never their own). Admins can
+  /// revoke this without changing the person's role.
+  peerVerifierEnabled      Boolean   @default(true) @map("peer_verifier_enabled")
+  /// Link to the Keycloak identity that owns this profile. Null for users who
+  /// still authenticate locally (AUTH_MODE=local or dual).
+  keycloakId               String?   @unique @map("keycloak_id")
+  lastLoginAt              DateTime? @map("last_login_at")
+  deactivatedAt            DateTime? @map("deactivated_at")
+  deactivatedReason        String?   @map("deactivated_reason")
+  verificationToken        String?   @map("verification_token")
+  verificationTokenExpires DateTime? @map("verification_token_expires")
+  resetToken               String?   @map("reset_token")
+  resetTokenExpires        DateTime? @map("reset_token_expires")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  wallet                  TokenWallet?
+  ledgerSent              TokenLedger[]       @relation("LedgerFrom")
+  ledgerReceived          TokenLedger[]       @relation("LedgerTo")
+  verificationsAsStudent  SkillVerification[] @relation("StudentVerifications")
+  verificationsAsVerifier SkillVerification[] @relation("VerifierVerifications")
+  resumes                 Resume[]
+  jobDescriptions         JobDescription[]
+  companiesCreated        Company[]
+  syllabiAsStudent        Syllabus[]          @relation("StudentSyllabi")
+  syllabiAsAdvisor        Syllabus[]          @relation("AdvisorSyllabi")
+  syllabiAsProfessor      Syllabus[]          @relation("ProfessorSyllabi")
+  supervisionsAsProfessor Supervision[]       @relation("ProfessorSupervisions")
+  supervisionsAsStudent   Supervision[]       @relation("StudentSupervisions")
+  ganSessions             GanSession[]
+  messagesSent            Message[]           @relation("MessagesSent")
+  messagesReceived        Message[]           @relation("MessagesReceived")
+  advisingIntakes         AdvisingIntake[]
+  auditLogs               AuditLog[]          @relation("AuditActor")
+
+  @@index([role])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("users")
+}
+
+/// Immutable trail of administrative actions. Written by server/routes/admin.js
+/// on every mutation so user-management changes are attributable after the fact.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  actorName  String   @map("actor_name")
+  actorRole  String?  @map("actor_role")
+  action     String
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  targetName String?  @map("target_name")
+  details    String?
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model TokenWallet {
+  id      String @id @default(uuid())
+  userId  String @unique @map("user_id")
+  balance Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("token_wallets")
+}
+
+model TokenLedger {
+  id         String   @id @default(uuid())
+  kind       String
+  amount     Int
+  fromUserId String?  @map("from_user_id")
+  toUserId   String?  @map("to_user_id")
+  fromLabel  String?  @map("from_label")
+  toLabel    String?  @map("to_label")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  fromUser User? @relation("LedgerFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
+  toUser   User? @relation("LedgerTo", fields: [toUserId], references: [id], onDelete: SetNull)
+
+  @@map("token_ledger")
+}
+
+model SkillVerification {
+  id           String   @id @default(uuid())
+  studentId    String   @map("student_id")
+  verifierId   String   @map("verifier_id")
+  skillName    String   @map("skill_name")
+  verifierRole String   @map("verifier_role")
+  confidence   Int
+  comment      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  student  User @relation("StudentVerifications", fields: [studentId], references: [id], onDelete: Cascade)
+  verifier User @relation("VerifierVerifications", fields: [verifierId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, verifierId, skillName])
+  @@map("skill_verifications")
+}
+
+model Resume {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  content   String
+  isCurrent Boolean  @default(true) @map("is_current")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("resumes")
+}
+
+model JobDescription {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  content       String
+  targetCompany String?  @map("target_company")
+  isCurrent     Boolean  @default(true) @map("is_current")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("job_descriptions")
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  profile   String?
+  sector    String?
+  createdBy String?  @map("created_by")
+  locked    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  creator  User?           @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  useCases CompanyUseCase[]
+
+  @@map("companies")
+}
+
+model CompanyUseCase {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  useCaseId   String   @map("use_case_id")
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("company_use_cases")
+}
+
+model Syllabus {
+  id          String         @id @default(uuid())
+  studentId   String?        @map("student_id")
+  advisorId   String?        @map("advisor_id")
+  professorId String?        @map("professor_id")
+  title       String
+  content     Json           @default("{}")
+  status      SyllabusStatus @default(pending)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  student      User?         @relation("StudentSyllabi", fields: [studentId], references: [id], onDelete: Cascade)
+  advisor      User?         @relation("AdvisorSyllabi", fields: [advisorId], references: [id], onDelete: SetNull)
+  professor    User?         @relation("ProfessorSyllabi", fields: [professorId], references: [id], onDelete: SetNull)
+  supervisions Supervision[]
+
+  @@map("syllabi")
+}
+
+model Supervision {
+  id            String   @id @default(uuid())
+  professorId   String   @map("professor_id")
+  studentId     String   @map("student_id")
+  syllabusId    String   @map("syllabus_id")
+  tokensAwarded Int      @default(900) @map("tokens_awarded")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  professor User     @relation("ProfessorSupervisions", fields: [professorId], references: [id], onDelete: Cascade)
+  student   User     @relation("StudentSupervisions", fields: [studentId], references: [id], onDelete: Cascade)
+  syllabus  Syllabus @relation(fields: [syllabusId], references: [id], onDelete: Cascade)
+
+  @@unique([professorId, syllabusId])
+  @@map("supervision")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  kind       String
+  fromUserId String   @map("from_user_id")
+  toUserId   String?  @map("to_user_id")
+  toRole     Role?    @map("to_role")
+  subject    String
+  body       String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  from User  @relation("MessagesSent", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to   User? @relation("MessagesReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([toUserId])
+  @@index([toRole])
+  @@map("messages")
+}
+
+model AdvisingIntake {
+  id         String   @id @default(uuid())
+  studentId  String   @map("student_id")
+  pathway    String
+  details    Json
+  guidance   String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, pathway])
+  @@index([createdAt])
+  @@map("advising_intakes")
+}
+
+model GanSession {
+  id                 String   @id @default(uuid())
+  userId             String   @map("user_id")
+  sector             String
+  loopsRun           Int      @default(0) @map("loops_run")
+  meanCoverage       Decimal? @map("mean_coverage") @db.Decimal(5, 2)
+  modules            Json?
+  equilibriumReached Boolean  @default(false) @map("equilibrium_reached")
+  recommendationText String?  @map("recommendation_text")
+  guidelineText      String?  @map("guideline_text")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("gan_sessions")
+}
+
+/// Runtime-configurable platform settings, editable by an Admin in the console.
+/// Key/value so new settings need no migration.
+model PlatformSetting {
+  key         String   @id
+  value       String
+  description String?
+  updatedBy   String?  @map("updated_by")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}

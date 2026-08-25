@@ -1,0 +1,112 @@
+run = "sh -c \"npm run setup && npm run dev:full\""
+entrypoint = "server/index.js"
+modules = ["nodejs-20", "web", "nix", "postgresql-16", "python-base-3.13"]
+
+hidden = [".config", "package-lock.json"]
+
+[nix]
+channel = "stable-25_05"
+
+[env]
+NODE_ENV = "development"
+
+# Full-stack app: React/Vite frontend (src/) + Express/Prisma/Postgres API (server/).
+# Dev "Run": starts the Vite dev server (port 5173, proxies /api -> :3000) and the
+# Express API (port 3000) together via `concurrently` (npm run dev:full).
+# Deployment: builds the frontend to dist/, applies pending Prisma migrations, then
+# starts a single Express process that serves both the API and the built frontend
+# (see server/index.js) — one process, one port, suitable for Autoscale.
+# Requires DATABASE_URL, JWT_SECRET and CLIENT_URL secrets at minimum — see
+# REPLIT_DEPLOY.md for the full list and setup steps.
+[deployment]
+build = ["sh", "-c", "npm run setup && npm run db:generate && npm run migrate:deploy && npm run build"]
+run = ["sh", "-c", "npm run start"]
+deploymentTarget = "autoscale"
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[[ports]]
+localPort = 3999
+externalPort = 3002
+
+[[ports]]
+localPort = 4599
+externalPort = 3003
+
+[[ports]]
+localPort = 5000
+externalPort = 5000
+
+[[ports]]
+localPort = 5001
+externalPort = 3001
+
+[[ports]]
+localPort = 5173
+externalPort = 80
+
+[agent]
+expertMode = true
+
+[userenv]
+
+[userenv.shared]
+JWT_SECRET = "a5b808f5054ed94c7d756c343a6eecbe2efad2a258d23c9e02988a7f40db9ca6d9bf5d837bd7c1d2dcc63505cd0a6814345baedd20f2360125f1eca470477382"
+JWT_EXPIRES_IN = "7d"
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = "587"
+SMTP_USER = "snegash@yahoo.com"
+SMTP_PASS = "ncmuoyhenkfuhsre"
+EMAIL_FROM = "GIVT Platform <snegash@yahoo.com>"
+GOOGLE_CLIENT_ID = "394254888815-eea1ekeo4c9a84fhvklbrtdbrpck1pmm.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "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"
+AUTH_MODE = "dual"
+VITE_AUTH_MODE = "dual"
+KEYCLOAK_AUDIENCE = "givt-api"
+KEYCLOAK_REALM = "givt"
+KEYCLOAK_URL = "https://keycloak-production-98c0.up.railway.app"
+VITE_KEYCLOAK_CLIENT_ID = "givt-frontend"
+VITE_KEYCLOAK_REALM = "givt"
+VITE_KEYCLOAK_URL = "https://keycloak-production-98c0.up.railway.app"
+
+[userenv.development]
+NODE_ENV = "development"
+CLIENT_URL = "https://be8a6f36-e7af-4a5b-aaeb-e44d4960b840-00-285n7h7to10ol.janeway.replit.dev"
+SERVER_URL = "https://be8a6f36-e7af-4a5b-aaeb-e44d4960b840-00-285n7h7to10ol.janeway.replit.dev"
+GOOGLE_CALLBACK_URL = "https://be8a6f36-e7af-4a5b-aaeb-e44d4960b840-00-285n7h7to10ol.janeway.replit.dev/api/auth/google/callback"
+
+[userenv.production]
+NODE_ENV = "production"
+CLIENT_URL = "https://GIVTsandbox.replit.app"
+SERVER_URL = "https://givt-test.replit.app"
+GOOGLE_CALLBACK_URL = "https://givt-test.replit.app/api/auth/google/callback"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev:bootstrap && npm run dev:full"
+waitForPort = 5000
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
